@@ -1,3 +1,4 @@
+/* eslint-disable prefer-const */
 import { escapeRegExp, type Direction, DIRECTION } from '../core/utils';
 import ChangeDetails from '../core/change-details';
 import { type TailDetails } from '../core/tail-details';
@@ -22,7 +23,7 @@ type MaskedNumberOptions = MaskedOptions<MaskedNumber,
   Number mask
 */
 export default
-class MaskedNumber extends Masked<number> {
+class MaskedNumber extends Masked<string> {
   static UNMASKED_RADIX = '.';
   static EMPTY_VALUES: Array<null | undefined | string | number> = [...Masked.EMPTY_VALUES, 0];
   static DEFAULTS: Partial<MaskedNumberOptions> = {
@@ -30,13 +31,11 @@ class MaskedNumber extends Masked<number> {
     radix: ',',
     thousandsSeparator: '',
     mapToRadix: [MaskedNumber.UNMASKED_RADIX],
-    min: Number.MIN_SAFE_INTEGER,
-    max: Number.MAX_SAFE_INTEGER,
+    min: Number.MIN_SAFE_INTEGER.toString(),
+    max: Number.MAX_SAFE_INTEGER.toString(),
     scale: 2,
     normalizeZeros: true,
     padFractionalZeros: false,
-    parse: Number,
-    format: (n: number) => n.toLocaleString('en-US', { useGrouping: false, maximumFractionDigits: 20 }),
   };
 
   declare mask: NumberConstructor;
@@ -47,9 +46,9 @@ class MaskedNumber extends Masked<number> {
   /** Array of single chars */
   declare mapToRadix: Array<string>;
   /** */
-  declare min: number;
+  declare min: string;
   /** */
-  declare max: number;
+  declare max: string;
   /** Digits after point */
   declare scale: number;
   /** Flag to remove leading and trailing zeros in the end of editing */
@@ -63,9 +62,9 @@ class MaskedNumber extends Masked<number> {
   /** */
   declare skipInvalid?: boolean | undefined;
   /** Format typed value to string */
-  declare format: (value: number, masked: Masked) => string;
+  declare format: (value: string, masked: Masked) => string;
   /** Parse string to get typed value */
-  declare parse: (str: string, masked: Masked) => number;
+  declare parse: (str: string, masked: Masked) => string;
 
   declare _numberRegExp: RegExp;
   declare _thousandsSeparatorRegExp: RegExp;
@@ -253,12 +252,19 @@ class MaskedNumber extends Masked<number> {
 
     if (valid) {
       // validate as number
-      const number = this.number;
-      valid = valid && !isNaN(number) &&
-        // check min bound for negative values
-        (this.min == null || this.min >= 0 || this.min <= this.number) &&
-        // check max bound for positive values
-        (this.max == null || this.max <= 0 || this.number <= this.max);
+      const number = this.numberString;
+      
+      const maskParts = this.max.split('.');
+      let digitsBeforeDecimal = maskParts[0].length;
+      let digitsAfterDecimal = 0;
+      if(maskParts.length > 1) {
+        digitsAfterDecimal = maskParts[1].length;
+      }
+
+      let numberParts = number.split('.');
+      valid = valid &&
+        (numberParts[0].replace('-', '').length <= digitsBeforeDecimal) &&
+        (numberParts.length <= 1 || (numberParts.length > 1 && numberParts[1].length <= digitsAfterDecimal));
     }
 
     return valid && super.doValidate(flags);
@@ -266,14 +272,14 @@ class MaskedNumber extends Masked<number> {
 
   override doCommit () {
     if (this.value) {
-      const number = this.number;
+      const number = this.numberString;
       let validnum = number;
 
       // check bounds
-      if (this.min != null) validnum = Math.max(validnum, this.min);
-      if (this.max != null) validnum = Math.min(validnum, this.max);
+      if (this.min != null && validnum.includes('-')) validnum = validnum.length <= this.min.length ? validnum : this.min;
+      if (this.max != null && !validnum.includes('-')) validnum = validnum.length <= this.max.length ? validnum : this.max;
 
-      if (validnum !== number) this.unmaskedValue = this.format(validnum, this);
+      if (validnum !== number) this.unmaskedValue = validnum;
 
       let formatted = this.value;
 
@@ -331,20 +337,20 @@ class MaskedNumber extends Masked<number> {
     super.unmaskedValue = unmaskedValue;
   }
 
-  override get typedValue (): number {
-    return this.parse(this.unmaskedValue, this);
+  override get typedValue (): string {
+    return this.unmaskedValue;
   }
 
-  override set typedValue (n: number) {
-    this.rawInputValue = this.format(n, this).replace(MaskedNumber.UNMASKED_RADIX, this.radix);
+  override set typedValue (n: string) {
+    this.rawInputValue = n.replace(MaskedNumber.UNMASKED_RADIX, this.radix);
   }
 
   /** Parsed Number */
-  get number (): number {
+  get numberString (): string {
     return this.typedValue;
   }
 
-  set number (number: number) {
+  set numberString (number: string) {
     this.typedValue = number;
   }
 
@@ -352,14 +358,14 @@ class MaskedNumber extends Masked<number> {
     Is negative allowed
   */
   get allowNegative (): boolean {
-    return (this.min != null && this.min < 0) || (this.max != null && this.max < 0);
+    return (this.min != null && this.min.includes('-')) || (this.max != null && this.max.includes('-'));
   }
 
   /**
     Is positive allowed
   */
   get allowPositive (): boolean {
-    return (this.min != null && this.min > 0) || (this.max != null && this.max > 0);
+    return (this.min != null && !this.min.includes('-')) || (this.max != null && !this.max.includes('-'));
   }
 
   override typedValueEquals (value: any): boolean {
