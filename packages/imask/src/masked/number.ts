@@ -21,6 +21,7 @@ type MaskedNumberOptions = MaskedOptions<MaskedNumber,
 
 /**
   Number mask
+  Copyright for portions of project dakota-kallas/imaskjs are held by uNmAnNeR, 2016 as part of project uNmAnNeR/imaskjs. All other copyright for project dakota-kallas/imaskjs are held by Skyward Inc, 2023.
 */
 export default
 class MaskedNumber extends Masked<string> {
